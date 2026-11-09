@@ -1,0 +1,114 @@
+# Build the packages and the [devstarbyte] repo database whenever a package's
+# source changes: push to pkgs/<name>/ and pacman sees the new version once
+# the build is done. Only packages whose current version isn't in x86_64/ yet
+# get built, so releasing one project leaves the others alone. By hand on Arch:
+#   cd pkgs/<name> && makepkg -s && repo-add -R x86_64/devstarbyte.db.tar.gz *.pkg.tar.zst
+# The workflow commits x86_64/ back to main.
+#
+# Signing: put the armored private key of "DevStarByte Packages" (no passphrase)
+# in the secret GPG_PRIVATE_KEY (Settings -> Secrets and variables -> Actions). The
+# repo uses SigLevel = Required, so unsigned builds would be rejected by pacman.
+name: Build packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pkgs/**"
+      - ".github/workflows/build-packages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# one build at a time, in order: each one starts from the newest branch
+concurrency:
+  group: build-packages
+  cancel-in-progress: false
+
+env:
+  REPO: devstarbyte
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      # git first, so checkout makes a real clone we can push from
+      - name: Install git
+        run: pacman -Syu --noconfirm --needed git
+
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      # makepkg refuses to run as root
+      - name: Add a build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          mkdir -p x86_64
+          chown -R builder: pkgs x86_64
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Import the signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::No GPG_PRIVATE_KEY secret: pacman would reject unsigned packages"
+            exit 1
+          fi
+          printf '%s\n' "$GPG_PRIVATE_KEY" | sudo -u builder gpg --batch --import
+          fpr=$(sudo -u builder gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
+          echo "GPGKEY=$fpr" >> "$GITHUB_ENV"
+
+      - name: Build new versions
+        run: |
+          for dir in pkgs/*/; do
+            missing=
+            for f in $(cd "$dir" && sudo -u builder makepkg --packagelist); do
+              [ -f "x86_64/$(basename "$f")" ] || missing=1
+            done
+            if [ -z "$missing" ]; then
+              echo "$dir: up to date"
+              continue
+            fi
+            echo "::group::Build $dir"
+            (cd "$dir" && sudo -u builder env GPGKEY="${GPGKEY:-}" \
+              makepkg --syncdeps --noconfirm --cleanbuild ${GPGKEY:+--sign}) || exit 1
+            echo "::endgroup::"
+          done
+
+      - name: Update the repo database
+        run: |
+          shopt -s nullglob
+          for pkg in pkgs/*/*.pkg.tar.zst; do
+            cp "$pkg" x86_64/
+            [ -f "$pkg.sig" ] && cp "$pkg.sig" x86_64/
+            chown -R builder: x86_64
+            (cd x86_64 && sudo -u builder env GPGKEY="${GPGKEY:-}" \
+              repo-add --remove ${GPGKEY:+--sign --key "$GPGKEY"} "$REPO.db.tar.gz" "$(basename "$pkg")") || exit 1
+          done
+          # git stores the .db/.files symlinks as text, which raw.githubusercontent
+          # would serve as is: replace them with real copies
+          cd x86_64
+          for f in "$REPO.db" "$REPO.files"; do
+            [ -f "$f.tar.gz" ] || continue
+            rm -f "$f" "$f.sig"
+            cp "$f.tar.gz" "$f"
+            [ -f "$f.tar.gz.sig" ] && cp "$f.tar.gz.sig" "$f.sig"
+          done
+          rm -f *.old *.old.sig
+          ls -la
+
+      - name: Commit the built packages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A x86_64
+          if git diff --cached --quiet; then
+            echo "Nothing changed"
+            exit 0
+          fi
+          git commit -m "Build packages for ${GITHUB_SHA::7}"
+          git push origin HEAD:main
