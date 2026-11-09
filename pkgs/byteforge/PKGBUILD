@@ -5,12 +5,12 @@
 #   2. set pkgver=0.2.0 (pkgrel=1) here, commit and push to arch-repo
 # For a packaging-only change, bump pkgrel instead. The Build packages workflow does the rest.
 pkgname=byteforge
-pkgver=0.3.1
+pkgver=0.3.2
 pkgrel=1
 pkgdesc="A modular, themeable IDE for C# built with Rust and GPUI"
 arch=('x86_64')
 url="https://github.com/DevStarByte/ByteForge"
-license=('MIT')
+license=('GPL-2.0-only')
 depends=('vulkan-icd-loader' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'libx11' 'libxcb'
          'fontconfig' 'freetype2' 'alsa-lib' 'dotnet-sdk' 'curl')
 makedepends=('git' 'rust' 'cmake' 'clang' 'pkgconf')
