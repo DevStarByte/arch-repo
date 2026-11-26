@@ -6,7 +6,7 @@
 # arch-repo builds, signs and publishes it. Edit it in ByteForge, not in arch-repo.
 # Keep depends/optdepends in sync with packaging/arch/PKGBUILD.
 pkgname=byteforge
-pkgver=1.3.1
+pkgver=1.4.1
 pkgrel=1
 pkgdesc="A modular, themeable IDE for C# built with Rust and GPUI"
 conflicts=('byteforge-beta')
@@ -22,7 +22,6 @@ optdepends=('ttf-jetbrains-mono: default editor font'
             'aspnet-targeting-pack: build ASP.NET Core, Razor and Blazor projects'
             'docker: Docker view'
             'docker-compose: Compose up/down'
-            'python: CSharpier formatter module'
             'vulkan-radeon: AMD Vulkan driver'
             'vulkan-intel: Intel Vulkan driver'
             'nvidia-utils: NVIDIA Vulkan driver')
@@ -40,6 +39,8 @@ build() {
   cd byteforge
   # the updater compares against the release version
   BYTEFORGE_VERSION="$pkgver" cargo build --release --frozen -p byteforge
+  # The .NET module host
+  DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet publish modulehost/ByteForge.ModuleHost.csproj -c Release -o "$srcdir/modulehost" -nologo
 }
 
 package() {
@@ -47,7 +48,7 @@ package() {
   install -Dm755 target/release/byteforge "$pkgdir/usr/lib/byteforge/byteforge"
   install -dm755 "$pkgdir/usr/lib/byteforge/themes"
   install -m644 themes/*.json "$pkgdir/usr/lib/byteforge/themes/"
-  cp -r --no-preserve=ownership modules "$pkgdir/usr/lib/byteforge/modules"
+  cp -r --no-preserve=ownership "$srcdir/modulehost" "$pkgdir/usr/lib/byteforge/modulehost"
   install -dm755 "$pkgdir/usr/bin"
   ln -s /usr/lib/byteforge/byteforge "$pkgdir/usr/bin/byteforge"
   install -Dm644 packaging/linux/byteforge.desktop "$pkgdir/usr/share/applications/byteforge.desktop"
