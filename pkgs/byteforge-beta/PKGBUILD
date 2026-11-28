@@ -8,7 +8,7 @@
 # Keep depends/optdepends in sync with packaging/arch/PKGBUILD.
 # pacman versions can't hold "-", so v1.1.0-beta.4 becomes 1.1.0beta.4, which sorts before 1.1.0.
 pkgname=byteforge-beta
-pkgver=1.8.0
+pkgver=1.9.1
 pkgrel=1
 _tag="v${pkgver/beta/-beta}"
 pkgdesc="A modular, themeable IDE for C# built with Rust and GPUI (pre-release)"
