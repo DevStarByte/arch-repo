@@ -6,7 +6,7 @@
 # arch-repo builds, signs and publishes it. Edit it in ByteForge, not in arch-repo.
 # Keep depends/optdepends in sync with packaging/arch/PKGBUILD.
 pkgname=byteforge
-pkgver=1.7.3
+pkgver=1.8.0
 pkgrel=1
 pkgdesc="A modular, themeable IDE for C# built with Rust and GPUI"
 conflicts=('byteforge-beta')
